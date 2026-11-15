@@ -1,0 +1,52 @@
+<!doctype html><html lang="bn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pocket · 120xBet Test Transfer</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f8f1f6;color:#29202a;font:15px system-ui,sans-serif}.wrap{max-width:520px;margin:20px auto;padding:15px}.card{background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 26px #490b2912}h1{margin:0 0 6px;color:#bf075f;font-size:26px}.sub{color:#6f6070;margin:0 0 20px}.tag{display:inline-block;background:#fff0f6;border:1px solid #f2bad3;padding:5px 9px;border-radius:20px;color:#aa135b;font-size:12px}.row{display:flex;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid #f2e9ef;align-items:center}.row strong{text-align:right;overflow-wrap:anywhere}.major{font-size:23px;color:#b9095d}.hint{font-size:13px;color:#6d5b67;line-height:1.6}.error{color:#aa123a;min-height:20px;white-space:pre-wrap}input{width:100%;padding:13px;border:1px solid #e0cad6;border-radius:10px;margin:5px 0 12px;font-size:16px}button{width:100%;border:0;border-radius:12px;background:#c80b65;color:#fff;padding:14px;font-size:15px;font-weight:700;cursor:pointer;margin-top:9px}button:disabled{opacity:.5;cursor:not-allowed}.secondary{background:#f3e7ed;color:#7b2451}.notice{padding:12px;border-radius:12px;background:#fff5dd;margin:14px 0;line-height:1.5}#profile,#form,#details{display:none}
+</style></head><body><main class="wrap"><section class="card"><span class="tag">TEST BALANCE ONLY · No real money</span><h1>Pocket Wallet</h1><p class="sub">120xBet · Currency conversion checkout</p><p id="state">Transfer details লোড হচ্ছে…</p><div id="details"><div class="row"><span>Pocket থেকে কাটবে</span><strong id="debit" class="major">—</strong></div><div class="row"><span>120xBet-এ যোগ হবে</span><strong id="credit" class="major">—</strong></div><div class="row"><span>Conversion rate</span><strong id="rate">—</strong></div><div class="row"><span>Rate date</span><strong id="rateDate">—</strong></div><div class="row"><span>Transfer status</span><strong id="status">—</strong></div><div class="row"><span>Expires</span><strong id="expiry">—</strong></div><p class="hint">উপরের পরিমাণ Worker থেকে যাচাই করা, ১৫ মিনিটের জন্য নির্ধারিত Test Rate। Reference FX Rate প্রকৃত টাকা লেনদেনের হার নয়।</p></div><div class="notice">আপনার Pocket Test Balance থেকে কেটে 120xBet Test Balance-এ যোগ হবে। Confirm করার আগে পরিমাণ মিলিয়ে নিন।</div><div id="form"><h3>Pocket Login</h3><label>মোবাইল নম্বর<input id="phone" type="tel" inputmode="numeric" maxlength="11" autocomplete="tel" placeholder="01XXXXXXXXX"></label><label>পাসওয়ার্ড<input id="password" type="password" autocomplete="current-password"></label><button id="login" type="button">Login</button></div><div id="profile"><p id="name"></p><p>Available Test Balance: <strong id="balance">—</strong></p><p id="enough"></p><button id="pay" type="button" disabled>Confirm Test Transfer</button><button id="logout" type="button" class="secondary">Logout</button></div><p id="error" class="error" role="alert"></p></section></main><script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {getFirestore,doc,getDoc} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+const API='https://pocket-test-transfer.pocketwalletapp49.workers.dev';
+const app=initializeApp({apiKey:'AIzaSyAVA7edncqonOkbi5f8nyuyDXZ6DzQs6UY',authDomain:'pocket-wallet-ef7f4.firebaseapp.com',projectId:'pocket-wallet-ef7f4',appId:'1:931792308422:web:d568e599ca3bc95b4e2fc7'},'pocket-transfer-checkout');
+const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
+const transferId=new URL(location.href).searchParams.get('transfer');let quote=null,busy=false;
+const money=(minor,currency)=>currency+' '+(minor/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function fail(e){$('error').textContent=e?.message||String(e)}
+async function loadQuote(){
+ if(!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(transferId||''))throw Error('Invalid transfer link');
+ const r=await fetch(API+'/v1/transfers/'+encodeURIComponent(transferId),{cache:'no-store'});
+ const j=await r.json();if(!r.ok||!j.ok)throw Error(j.error||'Transfer not found');
+ const t=j.transfer;quote=t;$('debit').textContent=money(t.amountMinor,'BDT');$('credit').textContent=money(t.creditMinor,t.currency);
+ $('rate').textContent='1 '+t.currency+' = '+Number(t.rateBdtPerUnit).toLocaleString('en-US',{maximumFractionDigits:6})+' BDT';
+ $('rateDate').textContent=t.rateTimestamp?new Date(t.rateTimestamp).toLocaleString('bn-BD'):'—';
+ $('status').textContent=t.status;$('expiry').textContent=new Date(t.expiresAt).toLocaleString('bn-BD');
+ $('details').style.display='block';$('state').textContent=t.status==='success'?'Test Transfer completed':t.status==='pending'?'পরিমাণ যাচাই করুন এবং Pocket-এ Login করুন':t.status==='reconciliation_required'?'Transfer needs reconciliation':'Transfer status: '+t.status;
+ await refreshUser(auth.currentUser);
+}
+async function refreshUser(user){
+ $('form').style.display=user?'none':'block';$('profile').style.display=user?'block':'none';$('pay').disabled=true;
+ if(!user||!quote)return;
+ try{
+ const d=await getDoc(doc(db,'users',user.uid));if(!d.exists())throw Error('Pocket profile পাওয়া যায়নি');
+ const p=d.data();if(p.status!=='active')throw Error('Pocket account active নয়');
+ const balance=Number(p.balance);if(!Number.isFinite(balance)||balance<0)throw Error('Invalid Pocket balance');
+ $('name').textContent=(p.name||'Pocket User');$('balance').textContent=money(Math.round(balance*100),'BDT');
+ const enough=Math.round(balance*100)>=quote.amountMinor;
+ $('enough').textContent=enough?'Test Balance পর্যাপ্ত':'Test Balance পর্যাপ্ত নয়';
+ $('pay').disabled=!enough||quote.status!=='pending'||Date.now()>quote.expiresAt;
+ }catch(e){fail(e)}
+}
+$('login').onclick=async()=>{const phone=$('phone').value.trim(),password=$('password').value;if(!/^01[3-9]\d{8}$/.test(phone)){fail(Error('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন'));return;}if(!password){fail(Error('পাসওয়ার্ড দিন'));return;}
+ $('login').disabled=true;$('error').textContent='';try{await signInWithEmailAndPassword(auth,'p'+phone+'@accounts.pocket-wallet.invalid',password)}catch{fail(Error('Login হয়নি। নম্বর বা পাসওয়ার্ড যাচাই করুন।'))}finally{$('login').disabled=false;$('password').value=''} };
+$('logout').onclick=()=>signOut(auth);
+$('pay').onclick=async()=>{if(busy||!quote||quote.status!=='pending'||!auth.currentUser)return;
+ const text='Pocket থেকে '+money(quote.amountMinor,'BDT')+' কেটে 120xBet-এ '+money(quote.creditMinor,quote.currency)+' Test Balance যোগ হবে। Confirm?';
+ if(!confirm(text))return;
+ busy=true;$('pay').disabled=true;$('error').textContent='';$('state').textContent='Processing… Please do not repeat.';
+ try{
+ const token=await auth.currentUser.getIdToken();const r=await fetch(API+'/v1/transfers/'+encodeURIComponent(transferId)+'/pay',{method:'POST',headers:{'X-Pocket-Token':token}});
+ const j=await r.json();if(!r.ok||!j.ok)throw Error(j.error||'Transfer failed');
+ $('state').textContent='Test Transfer successful';await loadQuote();
+ }catch(e){fail(e);$('state').textContent='Transfer could not be completed. Check status before retrying.';await loadQuote().catch(()=>{});}finally{busy=false}
+};
+onAuthStateChanged(auth,user=>refreshUser(user));
+loadQuote().catch(e=>{$('state').textContent='Transfer load failed';fail(e)});
+</script></body></html>
