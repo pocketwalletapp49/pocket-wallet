@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#d91b75"><title>Pocket • Test Checkout</title>
+<style>
+:root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#1d2230;background:#f7f7fb}*{box-sizing:border-box}body{margin:0}header{background:linear-gradient(135deg,#e82585,#a91565);color:white;padding:25px 18px 48px}header .wrap{max-width:480px;margin:auto}.brand{font-size:24px;font-weight:800;letter-spacing:-.5px}.sub{font-size:13px;opacity:.9;margin-top:3px}.shell{max-width:480px;margin:-27px auto 40px;padding:0 15px}.panel{background:#fff;border-radius:20px;padding:22px;box-shadow:0 9px 30px #24223b12}.pill{display:inline-block;padding:6px 10px;border-radius:99px;background:#fff1d6;color:#855300;font-size:11px;font-weight:800;letter-spacing:.4px}.heading{font-size:21px;font-weight:800;margin:14px 0 4px}.muted{color:#6d7280;font-size:13px}.amount{font-size:36px;font-weight:800;margin:18px 0 10px;color:#d91b75}.line{border-top:1px solid #eef0f4;margin:18px 0}.field{display:flex;justify-content:space-between;gap:14px;padding:10px 0;font-size:14px}.field span:first-child{color:#737987;flex-shrink:0}.field strong{font-size:13px;text-align:right;overflow-wrap:anywhere}.status{padding:10px 13px;border-radius:12px;background:#f1f5ff;color:#2a508e;font-weight:700;display:inline-block}.status.error{background:#fff0f0;color:#a52832}.status.expired{background:#fff4e8;color:#965600}.btn{display:block;width:100%;border:0;background:#d91b75;color:white;font-weight:750;font-size:15px;padding:15px;border-radius:12px;margin-top:20px;cursor:pointer}.btn:disabled{opacity:.55;cursor:wait}.note{background:#f7f7fb;border-radius:12px;padding:12px;margin-top:16px;color:#5e6574;font-size:12px;line-height:1.55}.footer{text-align:center;font-size:12px;color:#777e8b;margin-top:20px}#details[hidden]{display:none}
+</style>
+</head>
+<body><header><div class="wrap"><div class="brand">Pocket <span style="font-size:13px;font-weight:500">Wallet</span></div><div class="sub">Secure-looking test payment preview • No real funds</div></div></header>
+<main class="shell"><section class="panel" aria-live="polite"><span class="pill">TEST ONLY · NO REAL PAYMENT</span><h1 class="heading">Checkout details</h1><p class="muted" id="message">Loading payment intent…</p>
+<div id="details" hidden><div class="amount" id="amount"></div><div class="line"></div><div class="field"><span>Merchant</span><strong id="merchant"></strong></div><div class="field"><span>Payment ID</span><strong id="paymentId"></strong></div><div class="field"><span>Currency</span><strong id="currency"></strong></div><div class="field"><span>Created</span><strong id="created"></strong></div><div class="field"><span>Expires</span><strong id="expires"></strong></div><div class="field"><span>Status</span><strong id="status"></strong></div></div>
+<button id="retry" class="btn" type="button">Refresh payment status</button><div class="note">This is a payment-intent preview only. It cannot collect PINs, OTPs, or money, and cannot debit or credit a wallet. A pending intent is <b>not</b> a successful payment.</div></section><div class="footer">Pocket Wallet • Testing environment</div></main>
+<script>
+'use strict';
+const API='https://pocket-payment-gateway.pocketwalletapp49.workers.dev';
+const id=new URLSearchParams(location.search).get('intent');
+const el=k=>document.getElementById(k);
+const validId=typeof id==='string'&&/^[a-f0-9-]{36}$/i.test(id);
+const fmtDate=v=>{const n=Number(v);if(!Number.isFinite(n)||n<=0)return 'Unavailable';return new Date(n).toLocaleString('en-BD',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Dhaka'});};
+const text=(k,v)=>{el(k).textContent=String(v??'—');};
+async function load(){
+ el('retry').disabled=true;el('details').hidden=true;
+ if(!validId){text('message','Missing or invalid payment intent ID. Open the checkout URL returned by the gateway.');el('retry').disabled=false;return;}
+ text('message','Loading payment details…');
+ try{
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);
+  let res;try{res=await fetch(API+'/v1/checkout/'+encodeURIComponent(id),{headers:{Accept:'application/json'},signal:controller.signal,cache:'no-store'});}finally{clearTimeout(timeout);}
+  const data=await res.json();if(!res.ok||!data.ok||!data.payment)throw Error(data.error||'Unable to load payment');
+  const p=data.payment;
+  if(!Number.isSafeInteger(p.amountMinor)||p.amountMinor<0)throw Error('Invalid amount received');
+  text('amount',new Intl.NumberFormat('en-BD',{style:'currency',currency:'BDT'}).format(p.amountMinor/100));
+  text('merchant',p.merchant);text('paymentId',p.id);text('currency',p.currency);text('created',fmtDate(p.createdAt));text('expires',fmtDate(p.expiresAt));
+  const expired=p.status==='pending'&&Number(p.expiresAt)>0&&Date.now()>Number(p.expiresAt);
+  text('status',expired?'Pending (time elapsed)':String(p.status).toUpperCase());
+  text('message','Payment intent loaded. No funds will be transferred.');el('details').hidden=false;
+ }catch(err){text('message','Could not load checkout: '+(err.name==='AbortError'?'Request timed out':err.message)+'. Check your connection or gateway settings.');}
+ finally{el('retry').disabled=false;}
+}
+el('retry').addEventListener('click',load);load();
+</script></body></html>
